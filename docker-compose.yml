@@ -1,0 +1,78 @@
+# ==============================================================================
+# @file       docker-compose.yml
+# @brief      Docker Compose for Gestell Automotive Mini-ECU — all 3 teams
+# @company    Gestell Company
+#
+# Usage:
+#   docker compose build                          # Build the image
+#   docker compose run --rm embedded make all     # Run a make command
+#   docker compose run --rm embedded              # Open interactive shell
+#
+# Access Control:
+#   All services require GESTELL_TOKEN env variable.
+#   Set it in your shell: export GESTELL_TOKEN=<secret>
+#   Or pass it inline:    GESTELL_TOKEN=<secret> docker compose run --rm embedded
+# ==============================================================================
+
+services:
+  # ----------------------------------------------------------------------------
+  # Embedded Team — Firmware build, test, MISRA, coverage, flash
+  # ----------------------------------------------------------------------------
+  embedded:
+    image: gestell-ecu-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        # Pass your secret at build time:
+        # docker compose build --build-arg BUILD_TOKEN=<secret>
+        BUILD_TOKEN: ${BUILD_TOKEN}
+    volumes:
+      - .:/workspace
+    working_dir: /workspace/Embedded
+    environment:
+      - GESTELL_TOKEN=${GESTELL_TOKEN}
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # ----------------------------------------------------------------------------
+  # Dashboard Team — Web dashboard development (Node.js / npm)
+  # ----------------------------------------------------------------------------
+  dashboard:
+    image: gestell-ecu-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TOKEN: ${BUILD_TOKEN}
+    volumes:
+      - .:/workspace
+    working_dir: /workspace/Dashboard
+    environment:
+      - GESTELL_TOKEN=${GESTELL_TOKEN}
+    ports:
+      - "3000:3000"   # Dev server
+      - "5173:5173"   # Vite dev server
+    stdin_open: true
+    tty: true
+    command: /bin/bash
+
+  # ----------------------------------------------------------------------------
+  # Mobile Team — Flutter app development
+  # ----------------------------------------------------------------------------
+  mobile:
+    image: gestell-ecu-dev
+    build:
+      context: .
+      dockerfile: Dockerfile
+      args:
+        BUILD_TOKEN: ${BUILD_TOKEN}
+    volumes:
+      - .:/workspace
+    working_dir: /workspace/MobileApp
+    environment:
+      - GESTELL_TOKEN=${GESTELL_TOKEN}
+    stdin_open: true
+    tty: true
+    command: /bin/bash

@@ -1,0 +1,126 @@
+# ==============================================================================
+# @file       .github/workflows/mobile-ci.yml
+# @brief      CI/CD Pipeline — Mobile App Team (Flutter)
+# @company    Gestell Company
+# @copyright  Copyright (c) 2026, Gestell Company. All rights reserved.
+#
+# Triggers:
+#   - pull_request to: master, mo_develop
+#
+# Jobs:
+#   1. analyze   — Flutter analyze (dart analyzer)
+#   2. test      — Flutter unit tests
+#   3. build-apk — Build Android APK (debug)
+# ==============================================================================
+
+name: "Mobile App CI"
+
+on:
+  pull_request:
+    branches:
+      - master
+      - mo_develop
+    paths:
+      - "MobileApp/**"
+
+concurrency:
+  group: mobile-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  # ============================================================================
+  # Job 1: Flutter Analyze
+  # ============================================================================
+  analyze:
+    name: "mobile/analyze"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Flutter"
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "stable"
+          cache: true
+
+      - name: "Get Flutter dependencies"
+        working-directory: MobileApp
+        run: flutter pub get
+
+      - name: "Run Flutter analyze"
+        working-directory: MobileApp
+        run: flutter analyze
+
+  # ============================================================================
+  # Job 2: Flutter Tests
+  # ============================================================================
+  test:
+    name: "mobile/test"
+    runs-on: ubuntu-latest
+    needs: analyze
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Flutter"
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "stable"
+          cache: true
+
+      - name: "Get Flutter dependencies"
+        working-directory: MobileApp
+        run: flutter pub get
+
+      - name: "Run Flutter unit tests"
+        working-directory: MobileApp
+        run: flutter test --coverage
+
+      - name: "Upload test coverage report"
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-coverage-${{ github.sha }}
+          path: MobileApp/coverage/
+          retention-days: 30
+
+  # ============================================================================
+  # Job 3: Build Android APK
+  # ============================================================================
+  build-apk:
+    name: "mobile/build-apk"
+    runs-on: ubuntu-latest
+    needs: test
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Java (required for Android build)"
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: "Setup Flutter"
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "stable"
+          cache: true
+
+      - name: "Get Flutter dependencies"
+        working-directory: MobileApp
+        run: flutter pub get
+
+      - name: "Build debug APK"
+        working-directory: MobileApp
+        run: flutter build apk --debug
+
+      - name: "Upload APK artifact"
+        uses: actions/upload-artifact@v4
+        with:
+          name: mobile-apk-debug-${{ github.sha }}
+          path: MobileApp/build/app/outputs/flutter-apk/app-debug.apk
+          retention-days: 30

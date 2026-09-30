@@ -1,0 +1,182 @@
+# ==============================================================================
+# @file       .github/workflows/embedded-ci.yml
+# @brief      CI/CD Pipeline — Embedded Firmware Team
+# @company    Gestell Company
+# @copyright  Copyright (c) 2026, Gestell Company. All rights reserved.
+#
+# Triggers:
+#   - pull_request to: master, em_develop
+#
+# Jobs:
+#   1. build        — Compile firmware, produce .elf / .hex / .lss artifacts
+#   2. unit-tests   — Compile & run Unity unit tests on host
+#   3. coverage     — Generate lcov HTML coverage report
+#   4. misra-c      — Run MISRA-C static analysis with cppcheck
+#   5. memory-size  — Report AVR memory usage breakdown
+# ==============================================================================
+
+name: "Embedded Firmware CI"
+
+on:
+  pull_request:
+    branches:
+      - master
+      - em_develop
+    paths:
+      - "Embedded/**"
+      - "Dockerfile"
+
+concurrency:
+  group: embedded-ci-${{ github.ref }}
+  cancel-in-progress: true
+
+env:
+  GESTELL_CI: "true"   # Bypasses token check inside container
+
+jobs:
+  # ============================================================================
+  # Job 1: Firmware Build
+  # ============================================================================
+  build:
+    name: "embedded/build"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Install AVR toolchain"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            make gcc-avr avr-libc binutils-avr avrdude
+
+      - name: "Build firmware"
+        working-directory: Embedded
+        run: make build V=1
+
+      - name: "Upload firmware artifacts (.hex, .elf, .map)"
+        uses: actions/upload-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: |
+            Embedded/Firmware/Src/build/bin/*.hex
+            Embedded/Firmware/Src/build/bin/*.elf
+            Embedded/Firmware/Src/build/bin/*.map
+            Embedded/Firmware/Src/build/bin/*.lss
+          retention-days: 30
+
+  # ============================================================================
+  # Job 2: Unit Tests
+  # ============================================================================
+  unit-tests:
+    name: "embedded/unit-tests"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Install host toolchain & Unity dependencies"
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            make gcc-13 lcov
+
+      - name: "Run unit tests"
+        working-directory: Embedded
+        run: make test V=1
+
+      - name: "Upload test binaries"
+        uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: test-results-${{ github.sha }}
+          path: Embedded/Firmware/Test/build/test_bin/
+          retention-days: 7
+
+  # ============================================================================
+  # Job 3: Code Coverage
+  # ============================================================================
+  coverage:
+    name: "embedded/coverage"
+    runs-on: ubuntu-latest
+    needs: unit-tests
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Install host toolchain & lcov"
+        run: |
+          sudo add-apt-repository -y ppa:ubuntu-toolchain-r/test
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            make gcc-13 lcov
+
+      - name: "Run tests + generate coverage report"
+        working-directory: Embedded
+        run: make coverage V=1
+
+      - name: "Upload HTML coverage report"
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage-report-${{ github.sha }}
+          path: Embedded/Firmware/Test/build/coverage/html/
+          retention-days: 30
+
+  # ============================================================================
+  # Job 4: MISRA-C Static Analysis
+  # ============================================================================
+  misra-c:
+    name: "embedded/misra-c"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Install cppcheck"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends cppcheck make
+
+      - name: "Run MISRA-C analysis"
+        working-directory: Embedded
+        run: make misra V=1
+
+      - name: "Upload MISRA-C report"
+        uses: actions/upload-artifact@v4
+        with:
+          name: misra-report-${{ github.sha }}
+          path: Embedded/Firmware/Src/build/misra_report.txt
+          retention-days: 30
+
+  # ============================================================================
+  # Job 5: Memory Size Check
+  # ============================================================================
+  memory-size:
+    name: "embedded/memory-size"
+    runs-on: ubuntu-latest
+    needs: build
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Install AVR toolchain"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            make gcc-avr avr-libc binutils-avr
+
+      - name: "Download firmware artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          name: firmware-${{ github.sha }}
+          path: Embedded/Firmware/Src/build/bin/
+
+      - name: "Report AVR memory usage"
+        working-directory: Embedded
+        run: make size

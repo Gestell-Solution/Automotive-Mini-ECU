@@ -1,0 +1,179 @@
+# ==============================================================================
+# @file       .github/workflows/release.yml
+# @brief      Release Pipeline — All Teams (triggered on push to master)
+# @company    Gestell Company
+# @copyright  Copyright (c) 2026, Gestell Company. All rights reserved.
+#
+# Triggers:
+#   - push to master (after a PR is merged)
+#
+# Creates a unified GitHub Release with all team artifacts:
+#   - Firmware .hex file
+#   - Dashboard production bundle (zip)
+#   - Mobile APK (debug)
+# ==============================================================================
+
+name: "Release"
+
+on:
+  push:
+    branches:
+      - master
+
+jobs:
+  # ============================================================================
+  # Job 1: Build Firmware (Embedded)
+  # ============================================================================
+  release-embedded:
+    name: "release/embedded"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Install AVR toolchain"
+        run: |
+          sudo apt-get update -qq
+          sudo apt-get install -y --no-install-recommends \
+            make gcc-avr avr-libc binutils-avr
+
+      - name: "Build firmware"
+        working-directory: Embedded
+        run: make build V=1
+
+      - name: "Upload firmware hex"
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-firmware
+          path: Embedded/Firmware/Src/build/bin/*.hex
+          retention-days: 90
+
+  # ============================================================================
+  # Job 2: Build Dashboard
+  # ============================================================================
+  release-dashboard:
+    name: "release/dashboard"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Node.js"
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: Dashboard/package-lock.json
+
+      - name: "Install dependencies"
+        working-directory: Dashboard
+        run: npm ci
+
+      - name: "Build production bundle"
+        working-directory: Dashboard
+        run: npm run build
+
+      - name: "Zip dashboard dist"
+        run: zip -r dashboard-dist.zip Dashboard/dist/
+
+      - name: "Upload dashboard bundle"
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-dashboard
+          path: dashboard-dist.zip
+          retention-days: 90
+
+  # ============================================================================
+  # Job 3: Build Mobile APK
+  # ============================================================================
+  release-mobile:
+    name: "release/mobile"
+    runs-on: ubuntu-latest
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Setup Java"
+        uses: actions/setup-java@v4
+        with:
+          distribution: "temurin"
+          java-version: "17"
+
+      - name: "Setup Flutter"
+        uses: subosito/flutter-action@v2
+        with:
+          flutter-version: "stable"
+          cache: true
+
+      - name: "Get Flutter dependencies"
+        working-directory: MobileApp
+        run: flutter pub get
+
+      - name: "Build release APK"
+        working-directory: MobileApp
+        run: flutter build apk --release
+
+      - name: "Upload APK"
+        uses: actions/upload-artifact@v4
+        with:
+          name: release-mobile-apk
+          path: MobileApp/build/app/outputs/flutter-apk/app-release.apk
+          retention-days: 90
+
+  # ============================================================================
+  # Job 4: Create GitHub Release
+  # ============================================================================
+  create-release:
+    name: "release/publish"
+    runs-on: ubuntu-latest
+    needs: [release-embedded, release-dashboard, release-mobile]
+    permissions:
+      contents: write
+
+    steps:
+      - name: "Checkout repository"
+        uses: actions/checkout@v4
+
+      - name: "Download all release artifacts"
+        uses: actions/download-artifact@v4
+        with:
+          path: release-assets/
+
+      - name: "Get short SHA for tag"
+        id: sha
+        run: echo "short=$(echo ${{ github.sha }} | cut -c1-7)" >> $GITHUB_OUTPUT
+
+      - name: "Create GitHub Release"
+        uses: softprops/action-gh-release@v2
+        with:
+          tag_name: "release-${{ steps.sha.outputs.short }}"
+          name: "Gestell Mini-ECU Release — ${{ steps.sha.outputs.short }}"
+          body: |
+            ## Gestell Automotive Mini-ECU — Automated Release
+
+            **Commit:** `${{ github.sha }}`
+            **Branch:** `master`
+            **Date:** ${{ github.event.head_commit.timestamp }}
+
+            ### Artifacts
+            | Team | Artifact | Description |
+            |:---:|:---|:---|
+            | **Embedded** | `Gestell_Automotive_Mini_ECU.hex` | Firmware flash image for ATmega128 |
+            | **Dashboard** | `dashboard-dist.zip` | Web Dashboard production bundle |
+            | **Mobile** | `app-release.apk` | Android diagnostic app (release build) |
+
+            ### Firmware Specs
+            - **MCU:** ATmega128 @ 16 MHz
+            - **Architecture:** AUTOSAR 4-Layer (MCAL → HAL → OS → APP)
+            - **Flash with:** `avrdude -p atmega128 -c arduino -P /dev/ttyUSB0 -b 115200 -U flash:w:Gestell_Automotive_Mini_ECU.hex:i`
+
+            > Built by Gestell Company — Powered by GitHub Actions
+          files: |
+            release-assets/release-firmware/*.hex
+            release-assets/release-dashboard/dashboard-dist.zip
+            release-assets/release-mobile-apk/*.apk
+          draft: false
+          prerelease: false

@@ -1,0 +1,52 @@
+
+# Management files are kept outside this repository.
+AgileManagment/*
+
+# Common local and operating-system files
+.DS_Store
+Thumbs.db
+*.swp
+*.swo
+.vscode/
+.env
+
+# Dashboard (web application)
+Dashboard/**/node_modules/
+Dashboard/**/dist/
+Dashboard/**/build/
+Dashboard/**/.cache/
+Dashboard/**/.parcel-cache/
+Dashboard/**/.vite/
+Dashboard/**/coverage/
+Dashboard/**/.env
+Dashboard/**/.env.*
+!Dashboard/**/.env.example
+
+# Embedded firmware and toolchain outputs
+Embedded/**/build/
+Embedded/**/Debug/
+Embedded/**/Release/
+Embedded/**/*.o
+Embedded/**/*.d
+Embedded/**/*.elf
+Embedded/**/*.hex
+Embedded/**/*.bin
+Embedded/**/*.map
+Embedded/**/*.lst
+Embedded/**/*.lss
+Embedded/**/*.txt
+
+# Mobile app (Flutter/Dart)
+MobileApp/**/.dart_tool/
+MobileApp/**/.packages
+MobileApp/**/.pub-cache/
+MobileApp/**/build/
+MobileApp/**/coverage/
+MobileApp/**/.flutter-plugins
+MobileApp/**/.flutter-plugins-dependencies
+MobileApp/**/android/.gradle/
+MobileApp/**/android/local.properties
+MobileApp/**/ios/Pods/
+MobileApp/**/.env
+MobileApp/**/.env.*
+!MobileApp/**/.env.example
