@@ -13,7 +13,7 @@
 # Security: Docker Secrets / ARG-based password enforcement.
 #           The image requires BUILD_TOKEN to be passed at build time.
 #           Runtime access requires GESTELL_TOKEN env variable.
-# ==============================================================================
+# ============================================================================== 
 
 FROM ubuntu:22.04
 
