@@ -1,0 +1,41 @@
+name: Secure Branch Naming Check
+
+on:
+  create:
+  push:
+
+jobs:
+    verify-branch:
+      runs-on: ubuntu-latest
+      steps:
+        - name: Check Branch and Bypass
+          run: |
+            BRANCH_NAME="${GITHUB_REF#refs/heads/}"
+            USER_NAME="${{ github.actor }}"
+            
+            echo "Branch: $BRANCH_NAME"
+            echo "User: $USER_NAME"
+            
+            # 1. Admin Bypass (Only your GitHub username is allowed to bypass)
+            if [ "$USER_NAME" == "Hisham4Ahmed" ]; then
+              echo "✅ Admin bypass granted for $USER_NAME. Skipping check."
+              exit 0
+            fi
+            
+            # 2. Skip check for main/base branches or tags
+            if [[ "$BRANCH_NAME" == "Master" || "$BRANCH_NAME" == "em_develop" || "$BRANCH_NAME" == "da_develop" || "$BRANCH_NAME" == "mo_develop" || "$BRANCH_NAME" == refs/tags/* ]]; then
+              echo "✅ Protected/Base branch. Skipping check."
+              exit 0
+            fi
+            
+            # 3. Regex validation for team members
+            REGEX="^(feature|Feat|bug|Bug|test|Test)/[0-9]+-(em|da|mo)-[a-zA-Z0-9\-]+$|^(hotfix|Hotfix)/[0-9]+-[a-zA-Z0-9\-]+$"
+            
+            if [[ ! "$BRANCH_NAME" =~ $REGEX ]]; then
+              echo "❌ Push Rejected by GitHub Server!"
+              echo "💡 Invalid branch name format: $BRANCH_NAME"
+              echo "📌 Required format: type/issue#-team-description (e.g., feature/12-em-uart)"
+              exit 1
+            fi
+            
+            echo "✅ Branch name is valid."
